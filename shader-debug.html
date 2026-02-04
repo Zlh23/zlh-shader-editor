@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shader 调试</title>
+    <link rel="stylesheet" href="/src/main.css" />
+  </head>
+  <body>
+    <header class="debug-header">
+      <h1>Shader 调试</h1>
+      <button type="button" id="reload-shaders" class="btn-reload">Reload Shaders</button>
+    </header>
+    <input id="file-input" type="file" accept="image/*" class="hidden" aria-hidden />
+    <div class="pipeline-wrap">
+      <div class="pipeline" role="img" aria-label="管线：原图 → SAT → Pass1 → Pass2">
+        <div class="node" data-stage="source">
+          <span class="node-label">原图</span>
+          <div class="node-body">
+            <div class="node-image-wrap">
+              <canvas id="node-source" class="node-canvas"></canvas>
+            </div>
+            <div id="pane-source" class="node-params"></div>
+          </div>
+          <div class="node-channels" aria-label="通道显示">
+            <button type="button" class="channel-btn active" data-channel="r">R</button>
+            <button type="button" class="channel-btn active" data-channel="g">G</button>
+            <button type="button" class="channel-btn active" data-channel="b">B</button>
+            <button type="button" class="channel-btn active" data-channel="a">A</button>
+          </div>
+        </div>
+        <div class="node" data-stage="sat">
+          <span class="node-label">SAT (CPU)</span>
+          <div class="node-body">
+            <div class="node-image-wrap">
+              <canvas id="node-sat" class="node-canvas"></canvas>
+            </div>
+            <div id="pane-sat" class="node-params">尺寸同原图</div>
+          </div>
+          <div class="node-channels" aria-label="通道显示">
+            <button type="button" class="channel-btn active" data-channel="r">R</button>
+            <button type="button" class="channel-btn active" data-channel="g">G</button>
+            <button type="button" class="channel-btn active" data-channel="b">B</button>
+            <button type="button" class="channel-btn active" data-channel="a">A</button>
+          </div>
+        </div>
+        <div class="node" data-stage="pass1">
+          <span class="node-label">Pass1</span>
+          <div class="node-body">
+            <div class="node-image-wrap">
+              <canvas id="node-pass1" class="node-canvas"></canvas>
+            </div>
+            <div id="pane-pass1" class="node-params"></div>
+          </div>
+          <div class="node-channels" aria-label="通道显示">
+            <button type="button" class="channel-btn active" data-channel="r">R</button>
+            <button type="button" class="channel-btn active" data-channel="g">G</button>
+            <button type="button" class="channel-btn active" data-channel="b">B</button>
+            <button type="button" class="channel-btn active" data-channel="a">A</button>
+          </div>
+        </div>
+        <div class="node" data-stage="final">
+          <span class="node-label">Pass2</span>
+          <div class="node-body">
+            <div class="node-image-wrap">
+              <canvas id="node-final" class="node-canvas"></canvas>
+            </div>
+            <div id="pane-final" class="node-params"></div>
+          </div>
+          <div class="node-channels" aria-label="通道显示">
+            <button type="button" class="channel-btn active" data-channel="r">R</button>
+            <button type="button" class="channel-btn active" data-channel="g">G</button>
+            <button type="button" class="channel-btn active" data-channel="b">B</button>
+            <button type="button" class="channel-btn active" data-channel="a">A</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/pages/shader-debug.ts"></script>
+  </body>
+</html>
