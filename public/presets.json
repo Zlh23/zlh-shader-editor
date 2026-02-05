@@ -1,0 +1,117 @@
+{
+  "presets": [
+    {
+      "id": "preset-a28vy4m5u",
+      "name": "未命名",
+      "state": {
+        "currentTime": 0,
+        "playing": false,
+        "duration": 10,
+        "frameStep": 0.03333333333333333,
+        "tracks": [
+          {
+            "id": "track-bft5zdnl5",
+            "paramKey": "n",
+            "label": "粒度 1 (粗)",
+            "keyframes": [
+              {
+                "t": 0,
+                "value": 6
+              },
+              {
+                "t": 5.995165232338428,
+                "value": 0
+              }
+            ],
+            "interpolation": "linear"
+          },
+          {
+            "id": "track-513b5a05e",
+            "paramKey": "n2",
+            "label": "粒度 2 (细)",
+            "keyframes": [
+              {
+                "t": 0,
+                "value": 12
+              },
+              {
+                "t": 5.995165232338428,
+                "value": 1
+              }
+            ],
+            "interpolation": "linear"
+          },
+          {
+            "id": "track-y2vwzb2ls",
+            "paramKey": "contrast",
+            "label": "对比度",
+            "keyframes": [
+              {
+                "t": 4.091458520776575,
+                "value": 100
+              }
+            ],
+            "interpolation": "linear"
+          }
+        ]
+      }
+    },
+    {
+      "id": "preset-p4j7clr6b",
+      "name": "未命名",
+      "state": {
+        "currentTime": 0,
+        "playing": false,
+        "duration": 10,
+        "frameStep": 0.03333333333333333,
+        "tracks": [
+          {
+            "id": "track-bft5zdnl5",
+            "paramKey": "n",
+            "label": "粒度 1 (粗)",
+            "keyframes": [
+              {
+                "t": 0,
+                "value": 6
+              },
+              {
+                "t": 5.995165232338428,
+                "value": 0
+              }
+            ],
+            "interpolation": "linear"
+          },
+          {
+            "id": "track-513b5a05e",
+            "paramKey": "n2",
+            "label": "粒度 2 (细)",
+            "keyframes": [
+              {
+                "t": 0,
+                "value": 12
+              },
+              {
+                "t": 5.995165232338428,
+                "value": 1
+              }
+            ],
+            "interpolation": "linear"
+          },
+          {
+            "id": "track-y2vwzb2ls",
+            "paramKey": "contrast",
+            "label": "对比度",
+            "keyframes": [
+              {
+                "t": 4.091458520776575,
+                "value": 100
+              }
+            ],
+            "interpolation": "linear"
+          }
+        ]
+      }
+    }
+  ],
+  "currentPresetId": "preset-p4j7clr6b"
+}

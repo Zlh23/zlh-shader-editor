@@ -101,5 +101,5 @@ void main() {
   vec3 centerAvgRgb = mix(r1.centerAvgRgb, r2.centerAvgRgb, uBlendValue);
   vec3 outColor = field > 1e-6 ? totalColor / field : centerAvgRgb;
   float outField = min(field / uFieldScale, 1.0);
-  gl_FragColor = vec4(outField, outColor.r, outColor.g, outColor.b);
+  gl_FragColor = vec4(outColor.r, outColor.g, outColor.b, outField);
 }

@@ -14,8 +14,8 @@ varying vec2 vUv;
 
 void main() {
   vec4 pass1 = texture2D(uPass1Texture, vUv);
-  float field = pass1.r * uFieldScale;
-  vec3 sampledColor = pass1.gba;
+  float field = pass1.a * uFieldScale;
+  vec3 sampledColor = pass1.rgb;
   float s = smoothstep(uThreshold, uThreshold + uSoft, field);
   float inBlob = pow(s, uSoftFineness);
   vec3 dotColor = mix(uMonoColor, sampledColor, clamp(uUseColorBlend, 0.0, 1.0));

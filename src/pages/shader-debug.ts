@@ -1,31 +1,31 @@
 import {
   HalftoneProcessor,
-  createStagePane,
   getDefaultHalftonePaneParams,
   toProcessorParams,
-  type HalftonePaneParams,
   type HalftoneRenderStage,
   type HalftoneShaderSources,
-  type StagePaneStage,
 } from "@/Halftone";
+import {
+  createDebugNodeCard,
+  createStageControls,
+  createTimeline,
+  createParamStore,
+  createTimelinePresetsStore,
+  applyChannelMask,
+  applyRangeRemap,
+  type DebugNodeCard,
+} from "@/debug-ui";
 
 const DEFAULT_IMAGE_SRC = "/00042-2940631896.webp";
 
 const PIPELINE_STAGES: HalftoneRenderStage[] = ["source", "sat", "pass1", "final"];
 
-type ChannelKey = "r" | "g" | "b" | "a";
-const CHANNELS: ChannelKey[] = ["r", "g", "b", "a"];
-
-/** 每个阶段卡片的通道显示状态，默认全选 */
-function createDefaultChannelState(): Record<ChannelKey, boolean> {
-  return { r: true, g: true, b: true, a: true };
-}
-const channelState: Record<HalftoneRenderStage, Record<ChannelKey, boolean>> = {
-  source: createDefaultChannelState(),
-  sat: createDefaultChannelState(),
-  pass1: createDefaultChannelState(),
-  final: createDefaultChannelState(),
-};
+const STAGE_CONFIG: { stage: HalftoneRenderStage; label: string; paramsContent?: string }[] = [
+  { stage: "source", label: "原图" },
+  { stage: "sat", label: "SAT (CPU)", paramsContent: "尺寸同原图" },
+  { stage: "pass1", label: "Pass1" },
+  { stage: "final", label: "Pass2" },
+];
 
 async function fetchShaderSources(): Promise<HalftoneShaderSources | null> {
   try {
@@ -43,20 +43,7 @@ async function fetchShaderSources(): Promise<HalftoneShaderSources | null> {
 
 const fileInput = document.getElementById("file-input") as HTMLInputElement;
 const reloadBtn = document.getElementById("reload-shaders") as HTMLButtonElement;
-
-const paneContainers: Record<StagePaneStage, HTMLElement> = {
-  source: document.getElementById("pane-source") as HTMLElement,
-  sat: document.getElementById("pane-sat") as HTMLElement,
-  pass1: document.getElementById("pane-pass1") as HTMLElement,
-  final: document.getElementById("pane-final") as HTMLElement,
-};
-
-const nodeCanvases: Record<HalftoneRenderStage, HTMLCanvasElement> = {
-  source: document.getElementById("node-source") as HTMLCanvasElement,
-  sat: document.getElementById("node-sat") as HTMLCanvasElement,
-  pass1: document.getElementById("node-pass1") as HTMLCanvasElement,
-  final: document.getElementById("node-final") as HTMLCanvasElement,
-};
+const pipelineEl = document.getElementById("pipeline") as HTMLElement;
 
 document.body.classList.add("debug-page");
 
@@ -65,44 +52,7 @@ const paneDisposes: (() => void)[] = [];
 let rafId: number | null = null;
 let sourceImage: HTMLImageElement | null = null;
 
-const params: HalftonePaneParams & { uploadBtn: () => void } = {
-  ...getDefaultHalftonePaneParams(),
-  uploadBtn: () => fileInput.click(),
-};
-
-/** 根据当前通道选择对 canvas 的像素应用通道遮罩 */
-function applyChannelMask(
-  ctx: CanvasRenderingContext2D,
-  mask: Record<ChannelKey, boolean>
-): void {
-  const w = ctx.canvas.width;
-  const h = ctx.canvas.height;
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    if (!mask.r) data[i] = 0;
-    if (!mask.g) data[i + 1] = 0;
-    if (!mask.b) data[i + 2] = 0;
-    if (!mask.a) data[i + 3] = 0;
-  }
-  ctx.putImageData(imageData, 0, 0);
-}
-
-function render(): void {
-  if (!sourceImage?.width || !processor) return;
-
-  for (const stage of PIPELINE_STAGES) {
-    const resultCanvas = processor.render(sourceImage, toProcessorParams(params), stage);
-    const nodeCanvas = nodeCanvases[stage];
-    if (!resultCanvas || !nodeCanvas) continue;
-    nodeCanvas.width = resultCanvas.width;
-    nodeCanvas.height = resultCanvas.height;
-    const ctx = nodeCanvas.getContext("2d");
-    if (!ctx) continue;
-    ctx.drawImage(resultCanvas, 0, 0);
-    applyChannelMask(ctx, channelState[stage]);
-  }
-}
+const paramStore = createParamStore(getDefaultHalftonePaneParams());
 
 function scheduleRender(): void {
   if (rafId != null) return;
@@ -111,6 +61,34 @@ function scheduleRender(): void {
     render();
   });
 }
+
+function render(): void {
+  if (!sourceImage?.width || !processor || !cardsByStage) return;
+
+  for (const stage of PIPELINE_STAGES) {
+    const card = cardsByStage[stage];
+    if (!card) continue;
+    const resultCanvas = processor.render(
+      sourceImage,
+      toProcessorParams(paramStore.getParams()),
+      stage
+    );
+    if (!resultCanvas) continue;
+    const nodeCanvas = card.canvas;
+    nodeCanvas.width = resultCanvas.width;
+    nodeCanvas.height = resultCanvas.height;
+    const ctx = nodeCanvas.getContext("2d");
+    if (!ctx) continue;
+    ctx.drawImage(resultCanvas, 0, 0);
+    applyChannelMask(ctx, card.channelState);
+    const { min, max } = card.rangeState;
+    if (min !== 0 || max !== 255) {
+      applyRangeRemap(ctx, min, max);
+    }
+  }
+}
+
+let cardsByStage: Record<HalftoneRenderStage, DebugNodeCard> | null = null;
 
 function setReloadStatus(text: string): void {
   reloadBtn.textContent = text;
@@ -148,28 +126,29 @@ function onFileChange(e: Event): void {
   reader.readAsDataURL(file);
 }
 
-function bindChannelButtons(): void {
-  document.querySelectorAll<HTMLElement>(".node[data-stage]").forEach((node) => {
-    const stage = node.getAttribute("data-stage") as HalftoneRenderStage;
-    if (!PIPELINE_STAGES.includes(stage)) return;
-    const state = channelState[stage];
-    node.querySelectorAll<HTMLButtonElement>(".channel-btn[data-channel]").forEach((btn) => {
-      const ch = btn.getAttribute("data-channel") as ChannelKey;
-      if (!CHANNELS.includes(ch)) return;
-      btn.addEventListener("click", () => {
-        state[ch] = !state[ch];
-        btn.classList.toggle("active", state[ch]);
-        scheduleRender();
-      });
-    });
-  });
-}
-
 reloadBtn.addEventListener("click", handleReloadShaders);
 fileInput.addEventListener("change", onFileChange);
-bindChannelButtons();
 
 (async () => {
+  const cards: DebugNodeCard[] = [];
+  const byStage: Record<HalftoneRenderStage, DebugNodeCard> = {} as Record<
+    HalftoneRenderStage,
+    DebugNodeCard
+  >;
+
+  for (const config of STAGE_CONFIG) {
+    const card = createDebugNodeCard({
+      stage: config.stage,
+      label: config.label,
+      paramsContent: config.paramsContent,
+      onScheduleRender: scheduleRender,
+    });
+    pipelineEl.appendChild(card.root);
+    cards.push(card);
+    byStage[config.stage] = card;
+  }
+  cardsByStage = byStage;
+
   const sources = await fetchShaderSources();
   if (!sources) {
     console.error("Could not load shaders");
@@ -181,13 +160,21 @@ bindChannelButtons();
     return;
   }
 
+  const paramLabels = new Map<string, string>();
   const stageOptions = {
     onScheduleRender: scheduleRender,
-    uploadBtn: params.uploadBtn,
+    uploadBtn: () => fileInput.click(),
+    registerParamLabel: (paramKey: string, label: string) => paramLabels.set(paramKey, label),
   };
-  const stages: StagePaneStage[] = ["source", "sat", "pass1", "final"];
+  const stages: HalftoneRenderStage[] = ["source", "sat", "pass1", "final"];
   for (const stage of stages) {
-    const { dispose } = createStagePane(paneContainers[stage], params, stage, stageOptions);
+    const container = byStage[stage].paramsContainer;
+    const { dispose } = createStageControls(
+      container,
+      paramStore,
+      stage,
+      stageOptions
+    );
     paneDisposes.push(dispose);
   }
 
@@ -198,6 +185,138 @@ bindChannelButtons();
     scheduleRender();
   };
   img.src = DEFAULT_IMAGE_SRC;
+
+  const globalInfoBody = document.querySelector(".global-info-card__body");
+  if (globalInfoBody) {
+    globalInfoBody.textContent = "";
+    const presetsStore = createTimelinePresetsStore();
+    await presetsStore.init();
+
+    let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+    const AUTO_SAVE_DELAY_MS = 2000;
+    function scheduleAutoSave(): void {
+      if (autoSaveTimer != null) clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(() => {
+        autoSaveTimer = null;
+        const id = presetsStore.getCurrentPresetId();
+        if (id) presetsStore.savePreset(id, timeline.getState());
+      }, AUTO_SAVE_DELAY_MS);
+    }
+
+    const timeline = createTimeline({
+      paramStore,
+      onScheduleRender: scheduleRender,
+      getLabelForParamKey: (k) => paramLabels.get(k) ?? k,
+      onStateChange: scheduleAutoSave,
+    });
+
+    const toolbar = timeline.root.querySelector(".timeline__toolbar") as HTMLElement;
+    if (toolbar) {
+      const presetWrap = document.createElement("div");
+      presetWrap.className = "timeline__toolbar-presets";
+      const presetLabel = document.createElement("label");
+      presetLabel.className = "timeline__toolbar-presets-label";
+      presetLabel.textContent = "预设";
+      const comboWrap = document.createElement("div");
+      comboWrap.className = "timeline__toolbar-presets-combo";
+      const presetInput = document.createElement("input");
+      presetInput.type = "text";
+      presetInput.className = "timeline__toolbar-presets-input";
+      presetInput.setAttribute("aria-label", "预设名称，可输入或从列表选择");
+      presetInput.placeholder = "输入或选择预设名";
+      const listTrigger = document.createElement("button");
+      listTrigger.type = "button";
+      listTrigger.className = "timeline__toolbar-presets-trigger";
+      listTrigger.textContent = "▼";
+      listTrigger.setAttribute("aria-label", "选择已有预设");
+      const listDrop = document.createElement("div");
+      listDrop.className = "timeline__toolbar-presets-list";
+      listDrop.hidden = true;
+      function refreshPresetList(): void {
+        listDrop.textContent = "";
+        for (const p of presetsStore.getPresets()) {
+          const item = document.createElement("button");
+          item.type = "button";
+          item.className = "timeline__toolbar-presets-list-item";
+          item.textContent = p.name;
+          item.addEventListener("click", () => {
+            presetInput.value = p.name;
+            listDrop.hidden = true;
+          });
+          listDrop.appendChild(item);
+        }
+      }
+      listTrigger.addEventListener("click", () => {
+        refreshPresetList();
+        listDrop.hidden = !listDrop.hidden;
+      });
+      document.addEventListener("click", (e) => {
+        if (!comboWrap.contains(e.target as Node)) listDrop.hidden = true;
+      });
+      comboWrap.appendChild(presetInput);
+      comboWrap.appendChild(listTrigger);
+      comboWrap.appendChild(listDrop);
+
+      function loadPresetByName(): void {
+        const name = presetInput.value.trim();
+        if (!name) return;
+        const p = presetsStore.getPresets().find((x) => x.name === name);
+        if (p) {
+          presetsStore.setCurrentPresetId(p.id);
+          timeline.loadState(p.state);
+        } else {
+          window.alert(`未找到预设「${name}」`);
+        }
+      }
+      function saveToCurrentName(): void {
+        const name = presetInput.value.trim() || "未命名";
+        const p = presetsStore.getPresets().find((x) => x.name === name);
+        if (p) {
+          presetsStore.savePreset(p.id, timeline.getState());
+          presetsStore.setCurrentPresetId(p.id);
+        } else {
+          const id = presetsStore.saveAsNewPreset(name, timeline.getState());
+          presetsStore.setCurrentPresetId(id);
+        }
+        refreshPresetList();
+      }
+
+      const loadBtn = document.createElement("button");
+      loadBtn.type = "button";
+      loadBtn.className = "timeline__btn";
+      loadBtn.textContent = "加载";
+      loadBtn.setAttribute("aria-label", "加载当前名称对应的预设");
+      loadBtn.addEventListener("click", loadPresetByName);
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "timeline__btn";
+      saveBtn.textContent = "保存";
+      saveBtn.setAttribute("aria-label", "保存到当前名称（覆盖或新建）");
+      saveBtn.addEventListener("click", saveToCurrentName);
+
+      presetWrap.appendChild(presetLabel);
+      presetWrap.appendChild(comboWrap);
+      presetWrap.appendChild(loadBtn);
+      presetWrap.appendChild(saveBtn);
+      toolbar.insertBefore(presetWrap, toolbar.firstChild);
+    }
+
+    const currentId = presetsStore.getCurrentPresetId();
+    const currentPreset = currentId
+      ? presetsStore.getPresets().find((x) => x.id === currentId)
+      : null;
+    if (currentPreset) {
+      timeline.loadState(currentPreset.state);
+      const input = timeline.root.querySelector(
+        ".timeline__toolbar-presets-input"
+      ) as HTMLInputElement;
+      if (input) input.value = currentPreset.name;
+    }
+
+    globalInfoBody.appendChild(timeline.root);
+    paneDisposes.push(() => timeline.dispose());
+  }
 })();
 
 window.addEventListener("beforeunload", () => {

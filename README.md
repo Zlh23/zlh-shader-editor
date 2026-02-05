@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-浏览器打开：首页 `http://localhost:5173/`，[Halftone 预设](http://localhost:5173/halftone-preset.html)，[Shader 调试](http://localhost:5173/shader-debug.html)。
+浏览器打开：首页 `http://localhost:5173/`，[Halftone 预设](http://localhost:5173/halftone-preset.html)，[Shader 调试](http://localhost:5173/shader-debug.html)。Shader 调试页包含时间轴与预设，预设会写入 `public/presets.json`（仅开发环境）。
 
 ## 构建
 
@@ -23,9 +23,19 @@ npm run preview   # 预览 dist
 - `index.html`、`halftone-preset.html`、`shader-debug.html`：多页入口
 - `src/pages/*.ts`：各页脚本（原生 TS，无框架）
 - `src/Halftone/`：半调模块（WebGL + Tweakpane）
+- `src/debug-ui/`：调试页 UI（控件、参数存储、时间轴、预设），详见 [docs/debug-ui.md](docs/debug-ui.md)
 - `public/shaders/*.vert|.frag`：着色器源码，调试页「Reload Shaders」会重新 fetch 并编译
+- `public/presets.json`：时间轴预设存储（开发时通过 POST `/api/presets` 写入），详见 [docs/预设文件与API.md](docs/预设文件与API.md)
 
 修改 `public/shaders/` 下文件后，在调试页点击「Reload Shaders」即可生效。
+
+## 文档
+
+- [使用说明](docs/使用说明.md)：项目所有功能的使用说明（首页、Halftone 预设、Shader 调试页）
+- [debug-ui](docs/debug-ui.md)：调试 UI 模块的用法与集成
+- [时间轴与预设](docs/时间轴与预设.md)：时间轴与预设的数据与行为说明
+- [预设文件与 API](docs/预设文件与API.md)：`public/presets.json` 与 `/api/presets` 的约定
+- [SHADER-DEBUGGER-PLAN.md](SHADER-DEBUGGER-PLAN.md)：调试器实施计划
 
 ---
 
