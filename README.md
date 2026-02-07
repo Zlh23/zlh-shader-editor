@@ -1,125 +1,79 @@
-# Shader 调试器（纯 Vite + TypeScript）
+# zlh-shader-editor
 
-Halftone 半调效果与 Shader 管线调试，无 React / 无 Next.js。
+基于 Next.js + regl 的 Shader 预览项目。所有效果继承 `BaseShaderEffect`，子类用**声明式 uniform**（`Uniform` / `TextureUniform` / `TimeUniform`）挂参数，基类负责绑定、每帧取值与绘制；状态可订阅，React 通过 `useView` 绑定。
 
-## 开发
+## 技术栈
 
-```bash
-npm install
-npm run dev
+- **Next.js 16**（App Router）
+- **React 19**
+- **regl**：WebGL 封装，全屏四边形 + 自定义 shader
+- **Tailwind CSS 4**
+
+## 脚本
+
+| 命令 | 说明 |
+|------|------|
+| `npm run dev` | 开发服务器（端口 3210） |
+| `npm run build` | 生产构建 |
+| `npm run start` | 生产模式启动 |
+| `npm run lint` | ESLint 检查 |
+
+## 项目结构
+
+```
+src/
+├── app/
+│   ├── page.tsx            # 首页（挂 MaskDemo）
+│   └── MaskDemo/           # 示例：主图 + 遮罩图，矩形内显示遮罩并平移动画
+│       ├── index.ts        # 导出默认组件
+│       ├── shader.ts       # MaskDemoEffect（extends BaseShaderEffect）+ maskDemo
+│       └── MaskDemo.tsx    # 页面组件（useView + 主图/遮罩图选择 + 矩形宽高滑条）
+└── lib/
+    └── core/
+        ├── index.ts           # 统一导出
+        ├── types.ts           # IUniform、UniformContext
+        ├── effectUniforms.ts   # Uniform / TextureUniform / TimeUniform、createParamsProxy
+        └── BaseShaderEffect.ts # 基类：state、subscribe、run、unmount、useView
 ```
 
-浏览器打开：首页 `http://localhost:5173/`，[Halftone 预设](http://localhost:5173/halftone-preset.html)，[Shader 调试](http://localhost:5173/shader-debug.html)。Shader 调试页包含时间轴与预设，预设会写入 `public/presets.json`（仅开发环境）。
+## 核心库（`@/lib/core`）
 
-## 构建
+### 声明式 Uniform
 
-```bash
-npm run build
-npm run preview   # 预览 dist
-```
+所有 uniform 实现 **IUniform** 接口（`bind`、`getValueForFrame`、`dirty`）。基类在首次 `run` 时遍历实例上的 IUniform 做绑定并记名，每帧对每个名字调 `getValueForFrame(state, time, ctx, name)` 得到传给 regl 的值。
 
-## 结构
+- **Uniform&lt;T&gt;**：普通数值/向量，设 `value` 会 `setState` 并置 `dirty`；`getValueForFrame` 返回 `state[key]` 并在用后清 dirty。
+- **TextureUniform**：值为 `HTMLImageElement | null`，通过 `ctx.getTexture(key, image, isDirty)` 得到 regl 纹理；**是否上传到 GPU 由各 uniform 的 dirty 决定**，仅在 dirty 时上传。
+- **TimeUniform**：每帧按 `time` 计算，不参与 state，无 dirty。
 
-- `index.html`、`halftone-preset.html`、`shader-debug.html`：多页入口
-- `src/pages/*.ts`：各页脚本（原生 TS，无框架）
-- `src/Halftone/`：半调模块（WebGL + Tweakpane）
-- `src/debug-ui/`：调试页 UI（控件、参数存储、时间轴、预设），详见 [docs/debug-ui.md](docs/debug-ui.md)
-- `public/shaders/*.vert|.frag`：着色器源码，调试页「Reload Shaders」会重新 fetch 并编译
-- `public/presets.json`：时间轴预设存储（开发时通过 POST `/api/presets` 写入），详见 [docs/预设文件与API.md](docs/预设文件与API.md)
-
-修改 `public/shaders/` 下文件后，在调试页点击「Reload Shaders」即可生效。
-
-## 文档
-
-- [使用说明](docs/使用说明.md)：项目所有功能的使用说明（首页、Halftone 预设、Shader 调试页）
-- [debug-ui](docs/debug-ui.md)：调试 UI 模块的用法与集成
-- [时间轴与预设](docs/时间轴与预设.md)：时间轴与预设的数据与行为说明
-- [预设文件与 API](docs/预设文件与API.md)：`public/presets.json` 与 `/api/presets` 的约定
-- [SHADER-DEBUGGER-PLAN.md](SHADER-DEBUGGER-PLAN.md)：调试器实施计划
-
----
-
-## 作为 Next.js 插件使用
-
-本仓库可作为依赖被 Next.js 项目引用，在任意页面挂载 Shader 调试 UI。
-
-### 1. 安装依赖
-
-在 Next 项目根目录：
-
-```bash
-npm install /path/to/zlh-shader-editor
-# 或先发布到 npm 再：npm i zlh-realtime-shader-editor
-```
-
-在 Next 的 `next.config.js` 里开启对本地包的转译（若使用本地路径）：
-
-```js
-// next.config.mjs
-const nextConfig = {
-  transpilePackages: ['zlh-realtime-shader-editor'],
-};
-```
-
-### 2. 提供着色器接口
-
-调试器会通过 `shaderBaseUrl` 请求 `vertex.vert`、`fragmentPass1.frag`、`fragmentPass2.frag`。任选一种方式：
-
-**方式 A：放到 `public`**
-
-把本仓库里的 `public/shaders/` 拷到 Next 项目的 `public/shaders/`，则 `shaderBaseUrl: '/shaders'` 即可。
-
-**方式 B：API 路由**
-
-在 Next 项目里添加接口，例如 `app/api/shaders/[name]/route.ts`：
+子类在类上声明即可，例如：
 
 ```ts
-// app/api/shaders/[name]/route.ts
-import { NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
-import path from 'path';
-
-const ALLOWED = ['vertex.vert', 'fragmentPass1.frag', 'fragmentPass2.frag'];
-
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ name: string }> }
-) {
-  const { name } = await params;
-  if (!ALLOWED.includes(name)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  const base = process.cwd();
-  const content = await readFile(path.join(base, 'public', 'shaders', name), 'utf-8');
-  return new NextResponse(content, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
-}
+uHalfW = new BaseShaderEffect.Uniform(0.35);
+uTex = new BaseShaderEffect.TextureUniform();
+uMaskTex = new BaseShaderEffect.TextureUniform();
+uOffsetX = new BaseShaderEffect.TimeUniform((time) => 0.6 * Math.sin(time * 2));
 ```
 
-此时在插件里使用 `shaderBaseUrl: '/api/shaders'`（请求路径会变为 `/api/shaders/vertex.vert` 等，需与路由约定一致）。若路由是 `/api/shaders/[name]` 且 name 含扩展名，则 base 填 `/api/shaders` 即可。
+### BaseShaderEffect 基类
 
-### 3. 在页面中挂载
+- **状态与订阅**：内部 `state`，`getState()` / `setState(partial)`，`subscribe(listener)`。对外有 `params`（Proxy，读写即 state + emit），React 用 `useSyncExternalStore` 订阅。
+- **子类必须实现**：`getVert(): string`、`getFrag(): string`。
+- **子类可重写**：`getClearColor()`、`getAttributes()`、`getDepth()`、`getCount()`，基类默认全屏四边形、depth 关、count 6。
+- **父类提供**：
+  - **run(container)**：创建 regl、按 key 建纹理池（`getTexture(key, image, isDirty)`），每帧对每个 IUniform 调 `getValueForFrame` 拼成 uniform 对象并绘制；支持多纹理（每个 TextureUniform 一个 key）。
+  - **unmount()**：取消 frame、销毁纹理与 regl。
+  - **useView(viewMap)**：返回 `{ containerRef, ...viewMap(state, effect) }`；ref 上 run/unmount，用 `useSyncExternalStore` 订阅 effect；UI 可 `effect.params.xxx = v`、`effect.uTex.loadFromFile(file)` 等。
 
-在任意客户端组件中挂一个容器，并调用 `initShaderDebug`：
+### 设计要点
 
-```tsx
-'use client';
+- **声明式 uniform**：子类用字段声明 Uniform/TextureUniform/TimeUniform，基类自动收集、绑定、每帧取值，无需手写 getUniforms。
+- **dirty 驱动纹理更新**：纹理是否重新上传由对应 uniform 的 dirty 决定，避免每帧重复上传。
+- **多纹理**：每个 TextureUniform 对应一个 key，纹理池按 key 管理。
 
-import { useEffect, useRef } from 'react';
-import { initShaderDebug } from 'zlh-realtime-shader-editor/plugin';
+## 示例：MaskDemo
 
-export default function ShaderDebugPage() {
-  const containerRef = useRef<HTMLDivElement>(null);
+- **shader.ts**：`MaskDemoEffect` 声明 `uHalfW`、`uHalfH`（Uniform）、`uTex`、`uMaskTex`（TextureUniform）、`uOffsetX`（TimeUniform）。片元里主图用 `uTex`，矩形内用 `uMaskTex` 采样，**遮罩图用矩形局部 UV（0～1）缩放到遮罩块大小**，矩形外为主图。
+- **MaskDemo.tsx**：`maskDemo.useView(...)` 暴露 `halfW`/`halfH`、`setHalfW`/`setHalfH`、`onFileChange`（主图）、`onMaskFileChange`（遮罩图）；两个文件选择 + 两个滑条 + `containerRef` 绑 canvas 容器。
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const { dispose } = initShaderDebug(containerRef.current, {
-      shaderBaseUrl: '/shaders',           // 或 '/api/shaders'
-      defaultImageSrc: '/default.webp',    // 可选
-      paneTitle: 'Halftone 调试',
-    });
-    return () => dispose();
-  }, []);
-
-  return <div ref={containerRef} className="min-h-screen" />;
-}
-```
-
-挂载后即可在同一页使用阶段切换、Reload Shaders、上传图片和 Tweakpane 调参。
+首页（`app/page.tsx`）渲染 `<MaskDemo />`。
